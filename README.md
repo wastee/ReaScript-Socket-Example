@@ -44,8 +44,12 @@ The Lua client (`lua_example/api_client.lua`) uses a hardcoded path to load LuaS
 ## References
 
 https://forums.cockos.com/showthread.php?t=265912
+
 https://forum.cockos.com/showthread.php?p=2551512
+
 https://github.com/daniellumertz/DanielLumertz-Scripts
+
 https://github.com/RomeoDespres/reapy
+
 https://github.com/rxi/json.lua
 
