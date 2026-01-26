@@ -391,6 +391,55 @@ local HOST, PORT = "127.0.0.1", 9999
 local function pack_u32le(n) return string.pack("<I4", n) end
 local function unpack_u32le(s) return string.unpack("<I4", s) end
 
+local userdata_registry = setmetatable({}, { __mode = "v" })
+local userdata_handles = setmetatable({}, { __mode = "k" })
+local userdata_next_id = 1
+
+local function userdata_handle(val)
+  local handle = userdata_handles[val]
+  if handle then return handle end
+
+  local as_str = tostring(val)
+  local type_name, addr = as_str:match("^(%S+):%s*0x([0-9A-Fa-f]+)$")
+  if type_name and addr then
+    handle = string.format("(%s*)0x%s", type_name, addr)
+  else
+    handle = string.format("(userdata*)0x%016X", userdata_next_id)
+    userdata_next_id = userdata_next_id + 1
+  end
+
+  userdata_handles[val] = handle
+  userdata_registry[handle] = val
+  return handle
+end
+
+local function encode_value(val)
+  if val == json.null then return val end
+
+  local t = type(val)
+  if t == "userdata" then
+    return userdata_handle(val)
+  end
+  if t == "table" then
+    local out = {}
+    for k, v in pairs(val) do
+      out[k] = encode_value(v)
+    end
+    return out
+  end
+  return val
+end
+
+local function decode_value(val)
+  if val == json.null then return nil end
+
+  if type(val) == "string" then
+    local ref = userdata_registry[val]
+    if ref ~= nil then return ref end
+  end
+  return val
+end
+
 local Server = {}
 Server.__index = Server
 
@@ -452,7 +501,7 @@ function Server:_call(req)
 
   local args = req.args or {}
   for i = 1, #args do
-    if args[i] == json.null then args[i] = nil end
+    args[i] = decode_value(args[i])
   end
 
   local rets = table.pack(fn(table.unpack(args)))
@@ -460,11 +509,12 @@ function Server:_call(req)
   if rets.n == 0 then
     value = json.null
   elseif rets.n == 1 then
-    value = rets[1] == nil and json.null or rets[1]
+    value = rets[1] == nil and json.null or encode_value(rets[1])
   else
     value = {}
     for i = 1, rets.n do
-      value[i] = rets[i] == nil and json.null or rets[i]
+      local v = rets[i] == nil and json.null or rets[i]
+      value[i] = encode_value(v)
     end
   end
 
